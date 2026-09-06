@@ -104,9 +104,29 @@ services:
         value: "true"
 
       # ---- email ----
-      # "simulated" logs instead of sending. Switch to "smtp" and fill the rest
-      # in the dashboard when there is a real mailbox to send from.
+      # All six are `sync: false` — set in the dashboard, never in git.
+      #
+      # MAIL_DRIVER was pinned to `simulated` here, which is why the hosted
+      # server logged `[mail:simulated]` and sent nothing no matter what the
+      # dashboard said: a literal `value:` is blueprint-managed, so every sync
+      # overwrote the dashboard back to `simulated`. Set it to `smtp` there.
+      #
+      # MAIL_FROM must match the authenticated SMTP account — Gmail rejects or
+      # rewrites a From: it hasn't authorised, so the old no-reply@veritrust.app
+      # default could not have worked on a Gmail relay.
       - key: MAIL_DRIVER
-        value: simulated
+        sync: false
       - key: MAIL_FROM
-        value: VeriTrust <no-reply@veritrust.app>
+        sync: false
+      # smtp.gmail.com on 587 (STARTTLS). The code derives TLS mode from the
+      # port — `secure` is true only for 465 — so the port must match the host.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      # Gmail requires a 16-character App Password (2FA on the account), not the
+      # account password.
+      - key: SMTP_PASS
+        sync: false
