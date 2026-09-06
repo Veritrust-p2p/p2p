@@ -8,8 +8,13 @@ import { env } from "../config/env";
  * as the team agreed) and survive the tsc build because we resolve them from the
  * repo — not from dist. Delivery is SIMULATED by default: every send logs
  *   [mail:simulated] To <email>: <subject>
- * matching the existing verify/reset console pattern. Set MAIL_DRIVER=smtp
- * (and SMTP_*) plus `npm i nodemailer` to send for real — no other code changes.
+ * matching the existing verify/reset console pattern.
+ *
+ * Two real drivers, chosen with MAIL_DRIVER — the templates and every `mailer.*`
+ * call site are identical either way:
+ *   smtp    — SMTP_* through nodemailer. Works locally.
+ *   resend  — Resend's HTTPS API. Use this on a deployment: hosts commonly
+ *             block outbound SMTP, and :443 is never blocked.
  */
 
 // src/shared/mail -> ../../../templates == server/templates (dist mirrors this depth)
@@ -51,7 +56,10 @@ export function renderTemplate(name: string, vars: Vars): string {
 export async function sendMail(to: string, subject: string, template: string, vars: Vars): Promise<void> {
   try {
     const html = renderTemplate(template, vars);
-    if (env.MAIL_DRIVER === "smtp") {
+    if (env.MAIL_DRIVER === "resend") {
+      await sendResend(to, subject, html);
+      console.log(`[mail:sent] To ${to}: ${subject}`);
+    } else if (env.MAIL_DRIVER === "smtp") {
       await sendSmtp(to, subject, html);
       console.log(`[mail:sent] To ${to}: ${subject}`);
     } else {
@@ -59,6 +67,42 @@ export async function sendMail(to: string, subject: string, template: string, va
     }
   } catch (err) {
     console.error(`[mail:error] To ${to}: ${subject} —`, (err as Error).message);
+  }
+}
+
+/**
+ * Deliver over Resend's HTTPS API rather than SMTP.
+ *
+ * This exists because SMTP is unusable on the deployment, not because it is
+ * nicer: Render blocks outbound SMTP, so a send to smtp.gmail.com:587 sits
+ * there until it times out. Nothing reaches a mail server, so nothing bounces
+ * either, and the mail simply vanishes. Confirmed by elimination — the same
+ * credentials and transport authenticate against Gmail from a laptop in under
+ * a second.
+ *
+ * :443 is not blocked anywhere, which is the whole point. No SDK: one POST,
+ * using the global fetch, so this adds no dependency.
+ */
+async function sendResend(to: string, subject: string, html: string): Promise<void> {
+  if (!env.RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not set (MAIL_DRIVER=resend)");
+  }
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ from: env.MAIL_FROM, to: [to], subject, html }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) {
+    // Resend answers errors as JSON, but a proxy or a gateway error may not be,
+    // so fall back to the raw body rather than throwing while handling a throw.
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Resend responded ${res.status}: ${detail.slice(0, 300)}`);
   }
 }
 

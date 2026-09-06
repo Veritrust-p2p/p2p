@@ -82,14 +82,22 @@ export const env = {
    */
   DB_KEEPALIVE_MS: Number(process.env.DB_KEEPALIVE_MS ?? 4 * 60_000),
 
-  // Mail. "simulated" logs `[mail:simulated] To <email>: <subject>` (default);
-  // flip to "smtp" + fill SMTP_* and install nodemailer to send for real.
-  MAIL_DRIVER: (process.env.MAIL_DRIVER ?? "simulated") as "simulated" | "smtp",
+  // Mail. "simulated" logs `[mail:simulated] To <email>: <subject>` (default).
+  //
+  // "smtp" sends through SMTP_* — fine locally, but many hosts (Render among
+  // them) block outbound SMTP to stop spam, and a blocked port looks exactly
+  // like a hang: the connection times out with no bounce, because nothing ever
+  // reached a mail server that could generate one.
+  //
+  // "resend" posts to Resend's HTTPS API instead, on :443, which no host
+  // blocks. That is the driver to use on a deployment.
+  MAIL_DRIVER: (process.env.MAIL_DRIVER ?? "simulated") as "simulated" | "smtp" | "resend",
   MAIL_FROM: process.env.MAIL_FROM ?? "VeriTrust <no-reply@veritrust.app>",
   SMTP_HOST: process.env.SMTP_HOST ?? "",
   SMTP_PORT: Number(process.env.SMTP_PORT ?? 587),
   SMTP_USER: process.env.SMTP_USER ?? "",
   SMTP_PASS: process.env.SMTP_PASS ?? "",
+  RESEND_API_KEY: process.env.RESEND_API_KEY ?? "",
 };
 
 // Fail fast on boot instead of running on empty defaults. An unset JWT secret
