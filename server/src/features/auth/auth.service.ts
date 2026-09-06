@@ -77,7 +77,7 @@ function sendVerificationEmail(user: User): void {
   const link = `${env.WEB_ORIGIN}/verify-email?token=${token}`;
   // Console link is kept for dev (the launcher surfaces it); the templated email
   // is the real channel once MAIL_DRIVER=smtp.
-  console.log(`[mail:simulated] Email verification for ${user.email}: ${link}`);
+  console.log(`[verify-link] ${user.email}: ${link}`);
   void mailer.verifyAccount(user.email, user.fullName, link);
 }
 
@@ -219,7 +219,7 @@ export async function forgotPassword(email: string): Promise<void> {
     expiresIn: "30m",
   });
   const link = `${env.WEB_ORIGIN}/reset-password?token=${token}`;
-  console.log(`[mail:simulated] Password reset for ${email}: ${link}`);
+  console.log(`[reset-link] ${email}: ${link}`);
   void mailer.forgotPassword(user.email, user.fullName, link);
 }
 
