@@ -72,6 +72,19 @@ async function sendSmtp(to: string, subject: string, html: string): Promise<void
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
     secure: env.SMTP_PORT === 465,
+    // Force IPv4. Node 18+ resolves DNS verbatim, so smtp.gmail.com hands back
+    // its AAAA record first and gets tried first; the host has no outbound IPv6,
+    // so that attempt dies with
+    //   connect ENETUNREACH 2a00:1450:4001:c21::6d:587
+    // before the credentials are ever offered. Nothing reaches Gmail, so there
+    // is no bounce either — the mail just disappears. Pinning to IPv4 skips the
+    // dead AAAA and goes straight to the A record.
+    family: 4,
+    // Fail fast instead of hanging the default two minutes: a blocked port
+    // should show up in the log as an error, not as a request that never ends.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
     auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
   });
   await transport.sendMail({ from: env.MAIL_FROM, to, subject, html });
