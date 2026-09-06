@@ -104,22 +104,31 @@ services:
         value: "true"
 
       # ---- email ----
-      # All six are `sync: false` — set in the dashboard, never in git.
+      # All `sync: false` — set in the dashboard, never in git.
       #
       # MAIL_DRIVER was pinned to `simulated` here, which is why the hosted
       # server logged `[mail:simulated]` and sent nothing no matter what the
       # dashboard said: a literal `value:` is blueprint-managed, so every sync
-      # overwrote the dashboard back to `simulated`. Set it to `smtp` there.
+      # overwrote the dashboard back to `simulated`.
       #
-      # MAIL_FROM must match the authenticated SMTP account — Gmail rejects or
-      # rewrites a From: it hasn't authorised, so the old no-reply@veritrust.app
-      # default could not have worked on a Gmail relay.
+      # Set it to `resend`, NOT `smtp`. Render blocks outbound SMTP: a send to
+      # smtp.gmail.com:587 from here times out, and since nothing reaches a mail
+      # server, nothing bounces — the mail just disappears. The same credentials
+      # authenticate against Gmail from a laptop in under a second, so this is
+      # the network, not the config. Resend goes over :443 instead.
+      #
+      # MAIL_FROM must be an address the provider has authorised, or the mail is
+      # rejected or silently rewritten.
       - key: MAIL_DRIVER
         sync: false
       - key: MAIL_FROM
         sync: false
-      # smtp.gmail.com on 587 (STARTTLS). The code derives TLS mode from the
-      # port — `secure` is true only for 465 — so the port must match the host.
+      # MAIL_DRIVER=resend
+      - key: RESEND_API_KEY
+        sync: false
+      # MAIL_DRIVER=smtp — kept so a host that permits SMTP can still use it.
+      # 587 = STARTTLS, 465 = implicit TLS; the code derives TLS mode from the
+      # port, so the two must agree.
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
