@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import dns from "node:dns/promises";
 import { env } from "../config/env";
 
 /**
@@ -68,18 +69,30 @@ async function sendSmtp(to: string, subject: string, html: string): Promise<void
   const moduleName = "nodemailer";
   const mod: any = await import(moduleName);
   const nodemailer = mod.default ?? mod; // CJS/ESM interop
+  // Resolve the host to an IPv4 literal ourselves.
+  //
+  // Sends were dying with
+  //   connect ENETUNREACH 2a00:1450:4001:c21::6d:587
+  // on a host with no outbound IPv6. The obvious `family: 4` does nothing:
+  // smtp-connection never reads that option. Nodemailer resolves the hostname
+  // itself, concatenates the A and AAAA records, and then — in
+  // `lib/shared/index.js`, formatDNSValue — picks one of them **at random**:
+  //   addresses[Math.floor(Math.random() * addresses.length)]
+  // So every send was a coin flip between Gmail's IPv4 and an IPv6 address
+  // nothing here can route to, which is why the failures alternated between
+  // ENETUNREACH and a connect timeout.
+  //
+  // `resolveHostname` short-circuits on `net.isIP(host)` — "nothing to do
+  // here" — so handing it an address instead of a name skips that lottery
+  // entirely. `tls.servername` keeps certificate validation (and SNI) pointed
+  // at the real hostname, which an IP literal would otherwise break.
+  const { address } = await dns.lookup(env.SMTP_HOST, { family: 4 });
+
   const transport = nodemailer.createTransport({
-    host: env.SMTP_HOST,
+    host: address,
     port: env.SMTP_PORT,
     secure: env.SMTP_PORT === 465,
-    // Force IPv4. Node 18+ resolves DNS verbatim, so smtp.gmail.com hands back
-    // its AAAA record first and gets tried first; the host has no outbound IPv6,
-    // so that attempt dies with
-    //   connect ENETUNREACH 2a00:1450:4001:c21::6d:587
-    // before the credentials are ever offered. Nothing reaches Gmail, so there
-    // is no bounce either — the mail just disappears. Pinning to IPv4 skips the
-    // dead AAAA and goes straight to the A record.
-    family: 4,
+    tls: { servername: env.SMTP_HOST },
     // Fail fast instead of hanging the default two minutes: a blocked port
     // should show up in the log as an error, not as a request that never ends.
     connectionTimeout: 10_000,
