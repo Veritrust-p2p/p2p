@@ -89,15 +89,17 @@ export const env = {
   // like a hang: the connection times out with no bounce, because nothing ever
   // reached a mail server that could generate one.
   //
-  // "resend" posts to Resend's HTTPS API instead, on :443, which no host
+  // "brevo" posts to Brevo's HTTPS API instead, on :443, which no host
   // blocks. That is the driver to use on a deployment.
-  MAIL_DRIVER: (process.env.MAIL_DRIVER ?? "simulated") as "simulated" | "smtp" | "resend",
+  // "resend" remains available for existing deployments using that provider.
+  MAIL_DRIVER: (process.env.MAIL_DRIVER ?? "simulated") as "simulated" | "smtp" | "resend" | "brevo",
   MAIL_FROM: process.env.MAIL_FROM ?? "VeriTrust <no-reply@veritrust.app>",
   SMTP_HOST: process.env.SMTP_HOST ?? "",
   SMTP_PORT: Number(process.env.SMTP_PORT ?? 587),
   SMTP_USER: process.env.SMTP_USER ?? "",
   SMTP_PASS: process.env.SMTP_PASS ?? "",
   RESEND_API_KEY: process.env.RESEND_API_KEY ?? "",
+  BREVO_API_KEY: process.env.BREVO_API_KEY ?? "",
 };
 
 // Fail fast on boot instead of running on empty defaults. An unset JWT secret

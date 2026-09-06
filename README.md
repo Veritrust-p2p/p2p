@@ -305,7 +305,8 @@ The server reads its configuration from `server/.env`. Every variable is documen
 | `CLOUDINARY_*` | for uploads | Image / file upload storage |
 | `PAYSTACK_SECRET_KEY` | optional | Test‑mode fiat deposit; blank → instant simulated deposit |
 | `NOWPAYMENTS_API_KEY` | optional | TRX (Shasta) crypto rail; blank → crypto funding returns 501 |
-| `MAIL_DRIVER` | — | `simulated` (console, default) or `smtp` |
+| `MAIL_DRIVER` | — | `simulated` (console, default), `smtp`, `resend`, or `brevo` |
+| `BREVO_API_KEY` | when `MAIL_DRIVER=brevo` | Brevo transactional-email API key |
 
 > **Secrets never live in the repo.** `.env` files are gitignored; only `.env.example` is committed. Do not commit real credentials, connection strings, or the `.neon` project file.
 
