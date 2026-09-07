@@ -13,6 +13,7 @@ import Animated, {
 import { LogoMark } from '@/components/brand/logo-mark';
 
 import { Fonts, Primary } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 
 /**
  * Loading screen — the first thing the app shows.
@@ -20,9 +21,8 @@ import { Fonts, Primary } from '@/constants/theme';
  * Shows the web app's actual brand mark — the same artwork, ported path for
  * path in `@/components/brand/logo-mark` — on the dark canvas the rest of the
  * app boots on. The web footer sits the same mark on an even darker slate-950,
- * so it reads fine here without a plate behind it. Purely presentational for
- * now: it animates in, holds, then hands off to /login. When auth is wired,
- * the hand-off becomes "wait for the session check, then route accordingly".
+ * so it reads fine here without a plate behind it. It animates in, holds,
+ * then hands off to /home if authenticated, or /login if not.
  *
  * Colours are hard-coded rather than themed on purpose — this canvas is dark in
  * both light and dark mode, so themed text would go invisible in light mode.
@@ -45,12 +45,16 @@ function waveStyle(pulse: number, offset: number) {
 
 export function LoadingScreen() {
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
 
   // Kept in a ref so the hand-off timer below reads the live route, not the
   // value captured when the effect ran.
   const pathname = usePathname();
   const pathRef = useRef(pathname);
   pathRef.current = pathname;
+
+  const authRef = useRef(isAuthenticated);
+  authRef.current = isAuthenticated;
 
   // Shared values are the numbers Reanimated animates on the UI thread.
   const logoScale = useSharedValue(0.6);
@@ -90,11 +94,11 @@ export function LoadingScreen() {
 
     const leave = setTimeout(() => {
       // A deep link — a scanned join QR, say — can land the app elsewhere while
-      // this timer is still pending. Only hand off to login if the splash is
-      // still what's on screen, otherwise we'd stomp the link.
+      // this timer is still pending. Only hand off if the splash is still what's
+      // on screen, otherwise we'd stomp the link.
       if (pathRef.current !== '/splash') return;
       // `replace` instead of `push` so the back gesture can't return here.
-      router.replace('/login');
+      router.replace(authRef.current ? '/home' : '/login');
     }, HOLD_MS + EXIT_MS);
 
     return () => {

@@ -15,7 +15,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { useQueryClient } from '@tanstack/react-query';
 import type { User } from '@/constants/appTypes';
 import { tokenStore } from '@/features/shared/data/tokenStore';
-import { api, setSessionExpiredHandler } from '@/features/shared/data/api';
+import { api, ApiError, setSessionExpiredHandler } from '@/features/shared/data/api';
 import { dashboardKeys, type DashboardResponse } from '@/features/dashboard/data/dashboardApi';
 import { runTeardown } from '@/features/shared/data/teardown';
 
@@ -170,11 +170,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     void (async () => {
-      const access = await tokenStore.getAccess().catch(() => null);
-      if (!access) {
+      const [access, refresh, cachedUser] = await Promise.all([
+        tokenStore.getAccess().catch(() => null),
+        tokenStore.getRefresh().catch(() => null),
+        tokenStore.getUser().catch(() => null),
+      ]);
+
+      if (!access && !refresh) {
         // Never signed in on this device, or signed out last time.
         if (!cancelled) setState((s) => ({ ...s, isBooting: false }));
         return;
+      }
+
+      // If we have a cached user profile and credentials, immediately hydrate
+      // the session so cold starts don't block on network round-trips.
+      if (cachedUser && !cancelled) {
+        prefetchTabs(queryClient);
+        setState({
+          user: cachedUser,
+          isAuthenticated: true,
+          isLoading: false,
+          isRealSession: true,
+          isBooting: false,
+        });
       }
 
       try {
@@ -185,10 +203,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ),
         ]);
         if (cancelled) return;
-        // Same warming as sign-in — this lands on the tabs just as directly.
+        const freshUser = toAppUser(me);
+        await tokenStore.setUser(freshUser);
         prefetchTabs(queryClient);
         setState({
-          user: toAppUser(me),
+          user: freshUser,
           isAuthenticated: true,
           isLoading: false,
           isRealSession: true,
@@ -196,21 +215,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (err) {
         /*
-          A timeout is not a dead session. The API sleeps when idle on the free
-          tier and its first request can take far longer than the 1–4.5s a warm
-          DB-backed call costs, so keep the tokens and let the next launch try
-          again — only a real rejection is grounds for throwing them away.
+          Only an explicit 401 or 403 (invalid / expired token that could not be
+          refreshed) means the session is dead.
+          Timeouts, network errors (status 0), and sleeping servers are NOT
+          grounds for wiping tokens or signing the user out.
         */
-        const timedOut = err instanceof Error && err.message === 'restore-timeout';
-        if (!timedOut) await tokenStore.clear();
-        if (cancelled) return;
-        setState({
-          user: null,
-          isAuthenticated: false,
-          isLoading: false,
-          isRealSession: false,
-          isBooting: false,
-        });
+        const isAuthRejection = err instanceof ApiError && (err.status === 401 || err.status === 403);
+        if (isAuthRejection) {
+          await tokenStore.clear();
+          if (cancelled) return;
+          setState({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+            isRealSession: false,
+            isBooting: false,
+          });
+        } else {
+          // If we had no cached user profile to restore earlier, mark booting complete
+          // so the app can finish loading without clearing stored credentials.
+          if (!cancelled && !cachedUser) {
+            setState((s) => ({ ...s, isBooting: false }));
+          }
+        }
       }
     })();
 
@@ -227,6 +254,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         tokens: { accessToken: string; refreshToken: string };
       }>('/api/auth/login', { method: 'POST', body: { identifier, password } });
       await tokenStore.set(tokens.accessToken, tokens.refreshToken);
+      const appUser = toAppUser(user);
+      await tokenStore.setUser(appUser);
 
       prefetchTabs(queryClient);
 
@@ -237,7 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile now, so this is the same information one request earlier.
       */
       setState({
-        user: toAppUser(user),
+        user: appUser,
         isAuthenticated: true,
         isLoading: false,
         isRealSession: true,

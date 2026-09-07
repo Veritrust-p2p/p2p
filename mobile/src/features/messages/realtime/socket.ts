@@ -89,11 +89,16 @@ export function getSocket(): Socket {
   socket.on('connect_error', async (err: Error) => {
     if (err.message !== 'Invalid or expired token' || refreshing) return;
     refreshing = true;
-    const refreshed = await refreshTokens();
-    refreshing = false;
-    // The refresh token is spent too, so the session is genuinely gone. Stop
-    // retrying rather than hammering a server that will keep saying no.
-    if (!refreshed) disconnectSocket();
+    try {
+      const refreshed = await refreshTokens();
+      // The refresh token is spent too, so the session is genuinely gone. Stop
+      // retrying rather than hammering a server that will keep saying no.
+      if (!refreshed) disconnectSocket();
+    } catch {
+      // Network failure while refreshing tokens — keep socket quiet until network recovers
+    } finally {
+      refreshing = false;
+    }
   });
 
   // Logout closes it. Registered here rather than imported by AuthContext, so

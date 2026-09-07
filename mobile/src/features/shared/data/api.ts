@@ -76,10 +76,15 @@ async function uploadRequest<T>(
   // An upload can easily outlive a short-lived access token, so it gets the
   // same refresh-and-retry treatment as every other call.
   if (res.status === 401 && allowRefresh && access) {
-    const refreshed = await refreshTokens();
-    if (refreshed) return uploadRequest<T>(path, formData, false);
-    await tokenStore.clear();
-    onSessionExpired?.();
+    try {
+      const refreshed = await refreshTokens();
+      if (refreshed) return uploadRequest<T>(path, formData, false);
+      await tokenStore.clear();
+      onSessionExpired?.();
+    } catch (err) {
+      // Network failure while attempting refresh — keep tokens and propagate error.
+      throw err;
+    }
   }
 
   const data = res.status === 204 ? null : await res.json().catch(() => null);
@@ -114,10 +119,15 @@ async function request<T>(path: string, options: RequestOptions, allowRefresh: b
   }
 
   if (res.status === 401 && allowRefresh && access) {
-    const refreshed = await refreshTokens();
-    if (refreshed) return request<T>(path, options, false);
-    await tokenStore.clear();
-    onSessionExpired?.();
+    try {
+      const refreshed = await refreshTokens();
+      if (refreshed) return request<T>(path, options, false);
+      await tokenStore.clear();
+      onSessionExpired?.();
+    } catch (err) {
+      // Network failure while attempting refresh — keep tokens and propagate error.
+      throw err;
+    }
   }
 
   const data = res.status === 204 ? null : await res.json().catch(() => null);
@@ -171,20 +181,22 @@ export function refreshTokens(): Promise<boolean> {
 async function doRefresh(): Promise<boolean> {
   const refreshToken = await tokenStore.getRefresh();
   if (!refreshToken) return false;
+  let res: Response;
   try {
-    const res = await fetch(`${API_URL}/api/auth/refresh`, {
+    res = await fetch(`${API_URL}/api/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    if (!res.ok) return false;
-    // The endpoint wraps the pair: { tokens: { accessToken, refreshToken } }
-    const body = (await res.json()) as { tokens?: { accessToken?: string; refreshToken?: string } };
-    const tokens = body.tokens;
-    if (!tokens?.accessToken || !tokens?.refreshToken) return false;
-    await tokenStore.set(tokens.accessToken, tokens.refreshToken);
-    return true;
   } catch {
-    return false;
+    throw new ApiError(0, `Can't reach the server at ${API_URL}. Check you're on the same network.`);
   }
+  if (!res.ok) return false;
+  // The endpoint wraps the pair: { tokens: { accessToken, refreshToken } }
+  const body = (await res.json()) as { tokens?: { accessToken?: string; refreshToken?: string } };
+  const tokens = body.tokens;
+  if (!tokens?.accessToken || !tokens?.refreshToken) return false;
+  await tokenStore.set(tokens.accessToken, tokens.refreshToken);
+  return true;
 }
+
