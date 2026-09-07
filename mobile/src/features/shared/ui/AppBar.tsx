@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Bell, MessageSquare } from '@/components/icons';
+import { Bell, MessageSquare, Wallet } from '@/components/icons';
 
+import { Pressable } from '@/components/ui/pressable';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/context/AuthContext';
@@ -10,8 +11,8 @@ import { useConversations } from '@/features/messages/data/messagesApi';
 import { useUnreadNotifications } from '@/features/notifications/data/notificationsApi';
 
 /**
- * The app bar every signed-in home screen wears: avatar on the left, messages
- * and notifications on the right.
+ * The app bar every signed-in home screen wears: avatar on the left, wallet,
+ * messages and notifications on the right.
  *
  * Lifted out of `SellerDashboard`, which is where this pattern was first built
  * and still the reference for it. Same three destinations as the web header
@@ -23,8 +24,24 @@ import { useUnreadNotifications } from '@/features/notifications/data/notificati
  * per-conversation unread counts the inbox returns, notifications read the
  * `unread` total the list endpoint carries on every response. Neither costs an
  * extra request.
+ *
+ * Wallet is opt-in rather than always drawn. This bar is worn by the admin
+ * console too, and an admin has no wallet to open — the balance, top-ups and
+ * withdrawals it leads to are a buyer/seller concern. So the caller says
+ * whether the icon belongs, and only the buyer home passes it today.
+ *
+ * It sits to the *left* of the pair rather than on the outside edge, which
+ * leaves Messages and Bell on exactly the pixels they already occupied and
+ * keeps the two badge-carrying icons adjacent. No badge of its own: a balance
+ * is a figure, not a count of things left unread, and a dot here would read as
+ * money waiting to be collected.
  */
-export function AppBar() {
+export interface AppBarProps {
+  /** Draw the wallet icon. Off unless the screen actually has a wallet behind it. */
+  showWallet?: boolean;
+}
+
+export function AppBar({ showWallet = false }: AppBarProps) {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useAuth();
@@ -69,6 +86,18 @@ export function AppBar() {
       </Pressable>
 
       <View style={styles.appBarActions}>
+        {showWallet ? (
+          <Pressable
+            onPress={() => router.push('/wallet')}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Wallet"
+            style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.5 : 1 }]}
+          >
+            <Wallet size={23} color={theme.text} />
+          </Pressable>
+        ) : null}
+
         <Pressable
           onPress={() => router.push('/messages')}
           hitSlop={10}
