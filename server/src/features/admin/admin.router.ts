@@ -67,3 +67,12 @@ adminRouter.post(
 );
 
 adminRouter.get("/stats", adminController.getStats);
+
+// Payment environment. Test/live lives in the database rather than the
+// environment so it can be switched from the console without a redeploy.
+adminRouter.get("/settings/paystack-mode", adminController.getPaystackMode);
+adminRouter.patch(
+  "/settings/paystack-mode",
+  validate(adminValidation.paystackMode),
+  adminController.setPaystackMode,
+);

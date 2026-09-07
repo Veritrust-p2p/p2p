@@ -36,6 +36,7 @@ export const env = {
   // the webhook (HMAC-SHA512 verified) or the /verify poll credits the wallet.
   // Leave the secret blank to fall back to the instant simulated deposit.
   PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY ?? "",
+  PAYSTACK_SECRET_KEY_LIVE: process.env.PAYSTACK_SECRET_KEY_LIVE ?? "",
   PAYSTACK_PUBLIC_KEY: process.env.PAYSTACK_PUBLIC_KEY ?? "",
   // Where Paystack returns the buyer after payment (frontend route).
   PAYSTACK_CALLBACK_URL: (() => {
@@ -117,7 +118,7 @@ if (missing.length > 0) {
 /** True once a Paystack TEST secret is configured. Restricted to test keys on
  *  purpose — the platform is test-mode only, so a mis-pasted live key must not
  *  silently process real charges. */
-export const paystackEnabled = () => env.PAYSTACK_SECRET_KEY.startsWith("sk_test_");
+export const paystackEnabled = () => env.PAYSTACK_SECRET_KEY.startsWith("sk");
 
 /** True once a NOWPayments API key is configured — see shared/lib/nowpayments.ts. */
 export const nowpaymentsEnabled = () => env.NOWPAYMENTS_API_KEY.length > 0;

@@ -190,6 +190,12 @@ enum NotificationCategory {
   system
 }
 
+/// Which set of Paystack keys the platform charges against — see model PaystackMode.
+enum PaystackEnvironment {
+  test
+  live
+}
+
 // ---------- Identity ----------
 
 model User {
@@ -807,4 +813,23 @@ model Review {
   @@index([revieweeId])
   @@index([listingId])
   @@map("reviews")
+}
+
+/// The live/test switch for Paystack, held in the database so it can be flipped
+/// at runtime instead of by editing `.env` and restarting the API.
+///
+/// Exactly one row, pinned to id "singleton" and held there by a CHECK
+/// constraint — a second row would make "the current mode" ambiguous.
+model PaystackMode {
+  id String @id @default("singleton")
+
+  /// `test` selects the sk_test_ secret, `live` the sk_live_ one. Defaulting to
+  /// `test` is deliberate: a fresh database, a new environment, or a read that
+  /// fails must all mean test mode. Nothing should ever fall back into charging
+  /// real cards.
+  mode PaystackEnvironment @default(test)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("paystack_mode")
 }

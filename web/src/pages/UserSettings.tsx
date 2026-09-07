@@ -18,6 +18,7 @@ import {
   Loader2,
   Trash2,
   Palette,
+  SlidersHorizontal,
   Sun,
   Moon,
   Check,
@@ -32,6 +33,7 @@ import { apiErrorMessage } from '../features/shared/libs/api'
 // cannot disagree about what "dark" means or where it is stored — and so
 // changing it here updates the header icon, via the event that module fires.
 import { applyTheme } from '../features/shared/libs/theme'
+import { PaystackModeCard } from '../features/admin/ui/PaystackModeCard'
 
 const inputClass =
   'w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 py-2.5 pl-10 pr-4 text-xs sm:text-sm text-slate-900 dark:text-white focus:border-primary-500 focus:outline-none'
@@ -70,7 +72,7 @@ const THEME_OPTIONS = [
 ] as const
 
 export function UserSettings() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications' | 'appearance'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications' | 'appearance' | 'platform'>('profile')
   const [isDarkTheme, setIsDarkTheme] = useState(() =>
     typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
   )
@@ -173,10 +175,15 @@ export function UserSettings() {
               { id: 'security', label: 'Security & Password', icon: Lock },
               { id: 'notifications', label: 'Escrow Notifications', icon: Bell },
               { id: 'appearance', label: 'Appearance', icon: Palette },
+              // Admin-only, and rendered nowhere else: the endpoint behind this
+              // tab is requireAdmin, so it must not mount for a normal user.
+              ...(me?.role === 'admin'
+                ? [{ id: 'platform', label: 'Platform', icon: SlidersHorizontal }]
+                : []),
             ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
-                onClick={() => setActiveTab(id as 'profile' | 'security' | 'notifications' | 'appearance')}
+                onClick={() => setActiveTab(id as typeof activeTab)}
                 className={`w-full flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all text-left cursor-pointer ${
                   activeTab === id
                     ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-semibold shadow-sm'
@@ -495,6 +502,11 @@ export function UserSettings() {
               </p>
             </div>
           )}
+
+          {/* The role check is repeated here rather than trusted from the tab
+              list: activeTab is state, and this panel must not render for a
+              non-admin even if it somehow gets set. */}
+          {activeTab === 'platform' && me?.role === 'admin' && <PaystackModeCard />}
         </div>
       </div>
     </div>

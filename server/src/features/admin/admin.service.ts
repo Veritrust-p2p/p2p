@@ -1,11 +1,13 @@
 import { prisma } from "../../shared/lib/prisma";
 import { ApiError } from "../../shared/lib/errors";
 import { invalidateUser } from "../../shared/lib/auth-cache";
+import { env } from "../../shared/config/env";
 import type {
   AccountStatus,
   DisputeOutcome,
   EscrowStatus,
   KycStatus,
+  PaystackEnvironment,
   Prisma,
   UserRole,
   WithdrawalStatus,
@@ -1319,4 +1321,59 @@ export async function rejectWithdrawal(adminId: string, id: string, reason: stri
   });
 
   return walletService.serializeWithdrawal(withdrawal);
+}
+
+// ---------- Platform settings ----------
+
+/**
+ * The Paystack test/live switch, held in the `paystack_mode` singleton so it can
+ * be flipped from the console instead of by editing `.env` and redeploying.
+ *
+ * `upsert` rather than `findUnique`/`update` throughout: the row is seeded by
+ * migration, but a database restored without it must still answer here rather
+ * than 500 the settings page. The create falls back to the column default,
+ * which is `test`.
+ */
+export async function getPaystackMode() {
+  const row = await prisma.paystackMode.upsert({
+    where: { id: "singleton" },
+    update: {},
+    create: { id: "singleton" },
+  });
+  return {
+    mode: row.mode,
+    updatedAt: row.updatedAt,
+    // The console needs to know which secrets actually exist on the server, so
+    // it can explain a mode it cannot offer instead of failing on submit.
+    testKeyConfigured: Boolean(env.PAYSTACK_SECRET_KEY),
+    liveKeyConfigured: Boolean(env.PAYSTACK_SECRET_KEY_LIVE),
+  };
+}
+
+export async function setPaystackMode(adminId: string, mode: PaystackEnvironment) {
+  // Refuse a mode whose key is missing rather than accepting the flip and
+  // failing every deposit afterwards with a 501 the admin never sees.
+  const key = mode === "live" ? env.PAYSTACK_SECRET_KEY_LIVE : env.PAYSTACK_SECRET_KEY;
+  if (!key) {
+    throw ApiError.badRequest(
+      `Cannot switch to ${mode} mode: no ${mode} secret key is configured on the server`,
+    );
+  }
+
+  const row = await prisma.paystackMode.upsert({
+    where: { id: "singleton" },
+    update: { mode },
+    create: { id: "singleton", mode },
+  });
+
+  // Deliberately noisy. Going live means real cards get charged, and this line
+  // is the only record of who made that happen.
+  console.warn(`[admin] Paystack mode switched to ${row.mode} by admin ${adminId}`);
+
+  return {
+    mode: row.mode,
+    updatedAt: row.updatedAt,
+    testKeyConfigured: Boolean(env.PAYSTACK_SECRET_KEY),
+    liveKeyConfigured: Boolean(env.PAYSTACK_SECRET_KEY_LIVE),
+  };
 }

@@ -136,3 +136,13 @@ export const rejectWithdrawal = asyncHandler(async (req, res) => {
   );
   res.json({ withdrawal });
 });
+
+export const getPaystackMode = asyncHandler(async (_req, res) => {
+  const settings = await adminService.getPaystackMode();
+  res.json(settings);
+});
+
+export const setPaystackMode = asyncHandler(async (req, res) => {
+  const settings = await adminService.setPaystackMode(req.user!.id, req.body.mode);
+  res.json(settings);
+});

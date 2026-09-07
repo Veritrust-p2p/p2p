@@ -190,3 +190,10 @@ export const withdrawalReject: RequestSchema = {
     reason: Joi.string().trim().min(3).max(500).required(),
   }),
 };
+
+/** Test first, live second — the order the console offers them in. */
+export const paystackMode: RequestSchema = {
+  body: Joi.object({
+    mode: Joi.string().valid("test", "live").required(),
+  }),
+};

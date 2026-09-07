@@ -1,19 +1,46 @@
 import crypto from "node:crypto";
 import { env } from "../config/env";
+import { prisma } from "./prisma";
+import type { PaystackEnvironment } from "../../generated/prisma/client";
 import { ApiError } from "./errors";
 
 /**
- * Thin Paystack (test-mode) client. GHS amounts cross the wire in pesewas
- * (Paystack's minor unit), matching money.ts. Only the pieces the deposit flow
- * needs: initialize a charge, verify one by reference, and authenticate webhooks.
+ * Thin Paystack client, test or live per the `paystack_mode` row. GHS amounts
+ * cross the wire in pesewas (Paystack's minor unit), matching money.ts. Only
+ * the pieces the deposit flow needs: initialize a charge, verify one by
+ * reference, and authenticate webhooks.
  */
 
 const BASE = "https://api.paystack.co";
 
-function authHeaders() {
-  if (!env.PAYSTACK_SECRET_KEY) throw ApiError.notImplemented("Paystack is not configured");
+/**
+ * The live/test switch, read from the `paystack_mode` singleton.
+ *
+ * Deliberately uncached. A deposit issues at most two of these, so the query is
+ * negligible next to the round trip to Paystack itself, and a TTL cache would
+ * mean a flipped toggle keeps charging the old environment until it expires —
+ * the one kind of staleness this particular setting cannot afford.
+ *
+ * A missing row resolves to `test`, matching the column default. Every failure
+ * path here has to land on test; none may fall through to live.
+ */
+export async function currentMode(): Promise<PaystackEnvironment> {
+  const row = await prisma.paystackMode.findUnique({ where: { id: "singleton" } });
+  return row?.mode ?? "test";
+}
+
+/** The secret for one mode, or a 501 naming the key that is actually missing. */
+function secretFor(mode: PaystackEnvironment): string {
+  const key = mode === "live" ? env.PAYSTACK_SECRET_KEY_LIVE : env.PAYSTACK_SECRET_KEY;
+  if (!key) {
+    throw ApiError.notImplemented(`Paystack is in ${mode} mode but no ${mode} secret key is configured`);
+  }
+  return key;
+}
+
+async function authHeaders() {
   return {
-    Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}`,
+    Authorization: `Bearer ${secretFor(await currentMode())}`,
     "Content-Type": "application/json",
   };
 }
@@ -25,7 +52,7 @@ interface PaystackEnvelope<T> {
 }
 
 async function call<T>(path: string, init: RequestInit): Promise<T> {
-  const headers = authHeaders(); // throws 501 if unconfigured — must not be masked as 502
+  const headers = await authHeaders(); // throws 501 if unconfigured — must not be masked as 502
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, { ...init, headers });
