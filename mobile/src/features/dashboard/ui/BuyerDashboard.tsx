@@ -117,9 +117,10 @@ export function BuyerDashboard({ user }: { user: User }) {
 
   return (
     <View style={styles.wrap}>
-      {/* Profile, messages and notifications — the same bar the seller home
-          wears, so the two personas don't diverge. */}
-      <AppBar />
+      {/* Wallet, messages and notifications — the same bar the seller home
+          wears, so the two personas don't diverge. The wallet is asked for
+          here: the bar is shared with the admin console, which has none. */}
+      <AppBar showWallet />
 
       {/* Profile hero */}
       <View style={[styles.hero, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
