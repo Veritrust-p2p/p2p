@@ -111,11 +111,10 @@ services:
       # dashboard said: a literal `value:` is blueprint-managed, so every sync
       # overwrote the dashboard back to `simulated`.
       #
-      # Set it to `resend`, NOT `smtp`. Render blocks outbound SMTP: a send to
+      # Set it to `brevo` or `resend`, NOT `smtp`. Render blocks outbound SMTP: a send to
       # smtp.gmail.com:587 from here times out, and since nothing reaches a mail
-      # server, nothing bounces — the mail just disappears. The same credentials
-      # authenticate against Gmail from a laptop in under a second, so this is
-      # the network, not the config. Resend goes over :443 instead.
+      # server, nothing bounces — the mail just disappears. Both API drivers use
+      # HTTPS on :443 instead, so they work from Render.
       #
       # MAIL_FROM must be an address the provider has authorised, or the mail is
       # rejected or silently rewritten.
@@ -123,7 +122,10 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
-      # MAIL_DRIVER=resend
+      # MAIL_DRIVER=brevo
+      - key: BREVO_API_KEY
+        sync: false
+      # MAIL_DRIVER=resend — retained for deployments already using Resend.
       - key: RESEND_API_KEY
         sync: false
       # MAIL_DRIVER=smtp — kept so a host that permits SMTP can still use it.

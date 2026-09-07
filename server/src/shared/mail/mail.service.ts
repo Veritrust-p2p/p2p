@@ -10,11 +10,12 @@ import { env } from "../config/env";
  *   [mail:simulated] To <email>: <subject>
  * matching the existing verify/reset console pattern.
  *
- * Two real drivers, chosen with MAIL_DRIVER — the templates and every `mailer.*`
+ * Three real drivers, chosen with MAIL_DRIVER — the templates and every `mailer.*`
  * call site are identical either way:
  *   smtp    — SMTP_* through nodemailer. Works locally.
  *   resend  — Resend's HTTPS API. Use this on a deployment: hosts commonly
  *             block outbound SMTP, and :443 is never blocked.
+ *   brevo   — Brevo's HTTPS API. Same deployment-safe path, and no SDK is needed.
  */
 
 // src/shared/mail -> ../../../templates == server/templates (dist mirrors this depth)
@@ -56,7 +57,10 @@ export function renderTemplate(name: string, vars: Vars): string {
 export async function sendMail(to: string, subject: string, template: string, vars: Vars): Promise<void> {
   try {
     const html = renderTemplate(template, vars);
-    if (env.MAIL_DRIVER === "resend") {
+    if (env.MAIL_DRIVER === "brevo") {
+      await sendBrevo(to, subject, html);
+      console.log(`[mail:sent] To ${to}: ${subject}`);
+    } else if (env.MAIL_DRIVER === "resend") {
       await sendResend(to, subject, html);
       console.log(`[mail:sent] To ${to}: ${subject}`);
     } else if (env.MAIL_DRIVER === "smtp") {
@@ -67,6 +71,45 @@ export async function sendMail(to: string, subject: string, template: string, va
     }
   } catch (err) {
     console.error(`[mail:error] To ${to}: ${subject} —`, (err as Error).message);
+  }
+}
+
+/** Convert `Display name <sender@example.com>` into Brevo's sender object. */
+function brevoSender(from: string): { email: string; name?: string } {
+  const match = from.match(/^\s*(.*?)\s*<([^<>\s]+)>\s*$/);
+  if (match) {
+    const name = match[1] ?? "";
+    const email = match[2] ?? "";
+    return name ? { email, name } : { email };
+  }
+  return { email: from.trim() };
+}
+
+/** Deliver through Brevo's transactional-email HTTPS API. */
+async function sendBrevo(to: string, subject: string, html: string): Promise<void> {
+  if (!env.BREVO_API_KEY) {
+    throw new Error("BREVO_API_KEY is not set (MAIL_DRIVER=brevo)");
+  }
+
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "api-key": env.BREVO_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: brevoSender(env.MAIL_FROM),
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Brevo responded ${res.status}: ${detail.slice(0, 300)}`);
   }
 }
 

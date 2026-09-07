@@ -76,7 +76,7 @@ function sendVerificationEmail(user: User): void {
   });
   const link = `${env.WEB_ORIGIN}/verify-email?token=${token}`;
   // Console link is kept for dev (the launcher surfaces it); the templated email
-  // is the real channel once MAIL_DRIVER=smtp.
+  // is the real channel once a real MAIL_DRIVER is configured.
   console.log(`[verify-link] ${user.email}: ${link}`);
   void mailer.verifyAccount(user.email, user.fullName, link);
 }
